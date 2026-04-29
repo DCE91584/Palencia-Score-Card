@@ -111,9 +111,26 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .score-in{width:52px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Bebas Neue',sans-serif;font-size:26px;text-align:center;padding:2px 0;outline:none;flex-shrink:0}
 .score-in:focus{border-color:var(--gold)}
 .sc-net{font-size:9px;color:var(--muted);text-align:center;line-height:1.1;flex-shrink:0;width:36px}
-.dl-in{width:88px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-family:'Bebas Neue',sans-serif;font-size:24px;text-align:center;padding:3px 4px;outline:none;color:var(--muted);flex-shrink:0}
+.dl-in{width:88px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-family:'Bebas Neue',sans-serif;font-size:24px;text-align:center;padding:3px 4px;outline:none;color:var(--muted);flex-shrink:0;cursor:pointer;user-select:none;-webkit-user-select:none}
 .dl-in:focus{border-color:var(--gold)}
-.dl-in.pos-in{color:var(--pos)}.dl-in.neg-in{color:var(--neg)}
+.dl-in.pos-in{color:var(--pos);border-color:var(--pos)}.dl-in.neg-in{color:var(--neg);border-color:var(--neg)}
+
+/* ── Custom Money Numpad ── */
+#numpad-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.55);display:none;align-items:flex-end}
+#numpad-overlay.open{display:flex}
+#numpad-sheet{width:100%;background:var(--surface);border-top:2px solid var(--gold);border-radius:16px 16px 0 0;padding:0 0 env(safe-area-inset-bottom,0);transform:translateY(100%);transition:transform .22s ease}
+#numpad-overlay.open #numpad-sheet{transform:translateY(0)}
+#numpad-display{display:flex;align-items:center;justify-content:space-between;padding:12px 18px 8px;border-bottom:1px solid var(--border)}
+#numpad-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+#numpad-value{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:.04em;min-width:120px;text-align:right;transition:color .1s}
+#numpad-value.pos{color:var(--pos)}#numpad-value.neg{color:var(--neg)}#numpad-value.zero{color:var(--muted)}
+#numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);margin:1px}
+.np-btn{background:var(--card);border:none;color:var(--text);font-family:'Bebas Neue',sans-serif;font-size:28px;padding:18px 0;text-align:center;cursor:pointer;transition:background .1s;user-select:none;-webkit-user-select:none}
+.np-btn:active{background:var(--border)}
+.np-btn.np-sign{font-size:22px;color:var(--gold)}
+.np-btn.np-back{font-size:22px;color:var(--muted)}
+.np-btn.np-done{background:var(--gold);color:#1a2e22;font-size:22px;letter-spacing:.1em}
+.np-btn.np-done:active{background:var(--gold-dim)}
 
 /* Team rows */
 .tm-row{display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);gap:6px}
@@ -501,6 +518,7 @@ function buildScoreBody(){
     const amt=state.holeDollars[hi][pi];
     const dispVal=amt!==null?amt:'';
     const inClass=amt!==null&&amt>0?'pos-in':amt!==null&&amt<0?'neg-in':'';
+    const dispTxt=amt!==null?(amt>0?`+$${Math.abs(amt)}`:`-$${Math.abs(amt)}`):'$';
     html+=`<div class="player-block">
       <div class="pb-row">
         <div class="sc-pnum">${pi+1}</div>
@@ -509,9 +527,7 @@ function buildScoreBody(){
           value="${sc}" placeholder="—" min="1" max="20"
           onchange="setScore(${pi},this.value)">
         <div class="sc-net">${netStr}</div>
-        <input class="dl-in ${inClass}" id="dl-${pi}-${hi}" type="number" inputmode="decimal"
-          value="${dispVal}" placeholder="$"
-          onchange="setDollar(${pi},${hi},this.value)">
+        <div class="dl-in ${inClass}" onclick="openNumpad(${pi},${hi},false)">${dispTxt}</div>
       </div>
     </div>`;
   }
@@ -519,9 +535,7 @@ function buildScoreBody(){
   /* ─ Section 2: Hole Info — team + low ball + total ─ */
   html+=`<div class="s-divider">Hole</div>`;
   html+=`<div class="tm-row"><div class="tm-lbl">Team Score</div>
-    <input class="tm-in" type="number" inputmode="decimal"
-      value="${state.teamScores[hi]}" placeholder="—"
-      onchange="setTeam(${hi},'score',this.value)"></div>`;
+    <div class="tm-in" style="cursor:pointer" onclick="openNumpad(0,${hi},true)">${state.teamScores[hi]||'—'}</div></div>`;
   html+=`<div class="tm-row" style="border:none"><div class="tm-lbl">Scores Used</div>
     <input class="tm-in" type="number" inputmode="numeric" pattern="[0-9]*"
       value="${state.scoresUsed[hi]}" placeholder="—" min="0" max="4"
@@ -758,15 +772,6 @@ function setTeam(hi,field,val){
   if(field==='score'){const n=parseFloat(val);state.teamScores[hi]=!isNaN(n)?String(n):'';}
   if(field==='used'){const n=parseInt(val);state.scoresUsed[hi]=(n>0)?String(n):'';}
 }
-function setDollar(pi,hi,val){
-  const n=parseFloat(val);
-  state.holeDollars[hi][pi]=(!isNaN(n)&&val.trim()!=='')?n:null;
-  buildRunningBar();
-  const inp=document.getElementById(`dl-${pi}-${hi}`);
-  if(inp){const a=state.holeDollars[hi][pi];inp.className='dl-in'+(a!==null&&a>0?' pos-in':a!==null&&a<0?' neg-in':'');}
-  const htRow=document.querySelector('.money-total-val');
-  if(htRow){const ht=holeTotalMoney(hi);htRow.className='money-total-val '+(ht>0?'pos':ht<0?'neg':'zero');htRow.textContent=fmtMoney(ht);}
-}
 
 /* ══ NAV ══ */
 function startRound(){readSetupState();showScreen('hole');}
@@ -792,9 +797,99 @@ function renderHole(){buildHoleTabs();buildRunningBar();buildHoleInfo();buildSco
 function jumpHole(idx){state.currentHole=idx;renderHole();}
 function changeHole(dir){let n=state.currentHole+dir;if(n<0)n=0;if(n>17)n=17;state.currentHole=n;renderHole();}
 
+/* ══ CUSTOM NUMPAD ══ */
+let _npPi=-1, _npHi=-1, _npIsTeam=false;
+let _npRaw='';   // digits only, no sign
+let _npNeg=false;
+
+function openNumpad(pi, hi, isTeam){
+  _npPi=pi; _npHi=hi; _npIsTeam=isTeam;
+  // read current value
+  let cur = isTeam ? parseFloat(state.teamScores[hi])||0 : (state.holeDollars[hi][pi]||0);
+  _npNeg = cur < 0;
+  _npRaw = cur!==0 ? String(Math.abs(Math.round(cur))) : '';
+  const lbl = isTeam ? 'TEAM SCORE' : `${pName(pi)} $`;
+  document.getElementById('numpad-label').textContent = lbl;
+  npRefreshDisplay();
+  const ov = document.getElementById('numpad-overlay');
+  ov.classList.add('open');
+}
+
+function npRefreshDisplay(){
+  const val = _npRaw==='' ? 0 : parseInt(_npRaw);
+  const signed = _npNeg ? -val : val;
+  const disp = document.getElementById('numpad-value');
+  if(signed > 0){ disp.textContent=`+$${val}`; disp.className='pos'; }
+  else if(signed < 0){ disp.textContent=`-$${val}`; disp.className='neg'; }
+  else { disp.textContent=`$0`; disp.className='zero'; }
+}
+
+function npDigit(d){
+  if(_npRaw.length >= 5) return;   // cap at 5 digits ($99999)
+  if(_npRaw==='0') _npRaw='';
+  _npRaw += d;
+  npRefreshDisplay();
+}
+
+function npBackspace(){
+  _npRaw = _npRaw.slice(0,-1);
+  npRefreshDisplay();
+}
+
+function npToggleSign(){
+  _npNeg = !_npNeg;
+  npRefreshDisplay();
+}
+
+function npDone(){
+  const val = _npRaw==='' ? 0 : parseInt(_npRaw);
+  const signed = _npNeg ? -val : val;
+  if(_npIsTeam){
+    state.teamScores[_npHi] = val===0 ? '' : String(signed);
+  } else {
+    state.holeDollars[_npHi][_npPi] = val===0 ? null : signed;
+    buildRunningBar();
+  }
+  buildScoreBody();
+  npClose();
+}
+
+function npClose(){
+  document.getElementById('numpad-overlay').classList.remove('open');
+}
+
+function npOverlayTap(e){
+  if(e.target===document.getElementById('numpad-overlay')) npClose();
+}
+
 /* ══ INIT ══ */
 buildRatings();
 buildDirectory();
 </script>
+<!-- ═══ CUSTOM MONEY NUMPAD ═══ -->
+<div id="numpad-overlay" onclick="npOverlayTap(event)">
+  <div id="numpad-sheet">
+    <div id="numpad-display">
+      <span id="numpad-label">$ AMOUNT</span>
+      <span id="numpad-value" class="zero">$0</span>
+    </div>
+    <div id="numpad-grid">
+      <button class="np-btn" onclick="npDigit('7')">7</button>
+      <button class="np-btn" onclick="npDigit('8')">8</button>
+      <button class="np-btn" onclick="npDigit('9')">9</button>
+      <button class="np-btn" onclick="npDigit('4')">4</button>
+      <button class="np-btn" onclick="npDigit('5')">5</button>
+      <button class="np-btn" onclick="npDigit('6')">6</button>
+      <button class="np-btn" onclick="npDigit('1')">1</button>
+      <button class="np-btn" onclick="npDigit('2')">2</button>
+      <button class="np-btn" onclick="npDigit('3')">3</button>
+      <button class="np-btn np-sign" onclick="npToggleSign()">+/−</button>
+      <button class="np-btn" onclick="npDigit('0')">0</button>
+      <button class="np-btn np-back" onclick="npBackspace()">⌫</button>
+      <button class="np-btn np-done" style="grid-column:1/-1" onclick="npDone()">DONE</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
